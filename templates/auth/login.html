@@ -1,0 +1,49 @@
+{% extends '_base.html' %}
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-2xl border border-gray-200 transition duration-300 hover:shadow-primary-light/50">
+        <div>
+            <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                Sign in to Your Study Terminal
+            </h2>
+            <p class="mt-2 text-center text-sm text-gray-600">
+                Access personalized notes, quizzes, and mock interviews.
+            </p>
+        </div>
+        <form class="mt-8 space-y-6" method="POST" action="{{ url_for('routes.login') }}">
+            <div class="rounded-md shadow-sm -space-y-px">
+                <div class="mb-3">
+                    <label for="username" class="sr-only">Username</label>
+                    <input id="username" name="username" type="text" autocomplete="username" required 
+                           class="appearance-none rounded-t-md relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-light focus:border-primary-light focus:z-10 sm:text-sm"
+                           placeholder="Username">
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="sr-only">Password</label>
+                    <input id="password" name="password" type="password" autocomplete="current-password" required 
+                           class="appearance-none rounded-b-md relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-light focus:border-primary-light focus:z-10 sm:text-sm"
+                           placeholder="Password">
+                </div>
+            </div>
+
+            <div>
+                <button type="submit" 
+                        class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-light hover:bg-primary-dark transition duration-150 shadow-md hover:shadow-lg">
+                    <span class="absolute left-0 inset-y-0 flex items-center pl-3">
+                        <i class="fas fa-lock h-5 w-5 text-indigo-300 group-hover:text-white transition duration-150"></i>
+                    </span>
+                    Sign in
+                </button>
+            </div>
+            
+            <div class="text-sm text-center mt-4">
+                <a href="{{ url_for('routes.register') }}" class="font-medium text-primary-light hover:text-primary-dark transition duration-150">
+                    Don't have an account? Register now.
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

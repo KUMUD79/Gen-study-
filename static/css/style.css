@@ -1,0 +1,13 @@
+/* gen_study/static/css/style.css */
+
+/* Custom styles for the high-tech, study-focused UI */
+
+/* * This file is intentionally minimal. 
+ * Most styling should be done using Tailwind utility classes 
+ * directly in the HTML templates.
+ */
+
+/* Example: Ensuring elements that receive LLM output wrap text correctly */
+#notes-content, #ai-critique {
+    line-height: 1.6;
+}

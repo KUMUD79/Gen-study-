@@ -1,0 +1,371 @@
+{% extends '_base.html' %}
+{% block title %}Placement Prep Module{% endblock %}
+
+{% block content %}
+<main class="prep-container mx-auto p-4 max-w-4xl">
+    <header>
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-6">🚀 Placement Prep Terminal</h1>
+        <p class="text-gray-600 mb-6">Analyze your career readiness with our Resume Score Check and Mock Interview Practice.</p>
+    </header>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    
+    <section id="main-menu" class="screen active p-6 bg-white rounded-lg shadow-md">
+        <h2 class="text-2xl font-semibold mb-4">Select a Tool</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="option-card p-5 border border-blue-500 rounded-lg transition duration-150 hover:bg-blue-50 cursor-pointer" onclick="showScreen('ats-check-screen')">
+                <h3 class="text-xl font-bold mb-2">📄 ATS Score Check</h3>
+                <p class="text-sm text-gray-600">Upload your PDF resume to check keyword density and formatting compliance.</p>
+            </div>
+
+            <div class="option-card p-5 border border-green-500 rounded-lg transition duration-150 hover:bg-green-50 cursor-pointer" onclick="showScreen('mock-interview-screen')">
+                <h3 class="text-xl font-bold mb-2">🎙️ Mock Interview</h3>
+                <p class="text-sm text-gray-600">Practice speaking answers against a JD and get AI critique (Uses dedicated INTERVIEW_KEY).</p>
+            </div>
+        </div>
+    </section>
+
+
+    <section id="ats-check-screen" class="screen p-6 bg-white rounded-lg shadow-md">
+        <h2 class="text-2xl font-semibold mb-4">ATS Score Check </h2>
+        <p class="instruction text-gray-600">Upload your PDF resume. The server will score it against our Data Analyst profile using the processing engine.</p>
+        
+        <div class="ats-upload-area my-4">
+            <input type="file" id="resume-file-upload" accept=".pdf" required class="p-2 border rounded-md">
+            <button onclick="checkATSScore()" class="ml-4 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Check Score</button>
+        </div>
+
+        <div id="ats-result" class="result-box mt-4 p-4" style="display: none;">
+            <h4 class="text-lg font-bold">Analysis Result:</h4>
+            <p class="text-xl my-2">Your ATS Score: <span id="ats-score" class="font-extrabold text-green-600">--</span>/100</p>
+            <h5 class="font-semibold mt-3">Suggested Changes:</h5>
+            <ul id="ats-suggestions" class="list-disc list-inside ml-4 text-gray-700"></ul>
+        </div>
+
+        <button class="mt-6 py-2 px-4 bg-gray-200 rounded-lg hover:bg-gray-300 transition" onclick="showScreen('main-menu')">← Back to Tools</button>
+    </section>
+
+
+    <section id="mock-interview-screen" class="screen p-6 bg-white rounded-lg shadow-md">
+        <h2 class="text-2xl font-semibold mb-4">🎙️ Mock Interview Setup</h2>
+        <p class="instruction text-gray-600">Paste the Job Description (JD) to tailor the assessment questions.</p>
+
+        <div class="jd-input-area my-4">
+            <textarea id="jd-details" placeholder="Paste Full Job Description Here..." rows="6" class="w-full p-3 border rounded-md"></textarea>
+            <button id="btn-start-interview" onclick="startInterview()" class="mt-3 py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">Start 5-Question Interview</button>
+        </div>
+
+        <div id="interview-area" style="display: none;">
+            <hr class="my-4">
+            <h3 class="text-xl font-bold">Question <span id="question-number">1</span> of 5</h3>
+            <p id="current-question" class="question-text text-lg italic text-gray-800 my-4">Loading...</p>
+            
+            <div class="mic-controls flex items-center space-x-4">
+                <button id="btn-start-recording" onclick="startRecording()" class="py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">🎙️ Start Speaking</button>
+                <button id="btn-stop-recording" onclick="stopRecording()" disabled class="py-2 px-4 bg-gray-400 text-white rounded-lg transition">🛑 Stop & Assess</button>
+                <p id="mic-status" class="status-indicator text-sm">Ready to record.</p>
+            </div>
+
+            <div id="interview-feedback" class="result-box mt-4 p-4" style="display: none;">
+                <h4 class="text-lg font-bold">AI Feedback:</h4>
+                <p class="text-sm font-semibold text-gray-600">Transcript: <span id="transcript-display" class="font-normal">...</span></p>
+                <p id="feedback-summary" class="text-md italic mt-2"></p>
+                <p id="feedback-suggestion" class="text-md font-semibold text-gray-700 mt-1"></p>
+                <button id="btn-next-question" onclick="nextQuestion()" disabled class="mt-3 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">Next Question →</button>
+            </div>
+        </div>
+
+        <button class="mt-6 py-2 px-4 bg-gray-200 rounded-lg hover:bg-gray-300 transition" onclick="showScreen('main-menu')">← Back to Tools</button>
+    </section>
+
+</main>
+
+<script>
+    // --- CORE JAVASCRIPT LOGIC FOR THE PLACEMENT PREP PAGE ---
+
+    const API_BASE_URL = window.location.origin; 
+    const screens = document.querySelectorAll('.screen');
+    let currentQuestionIndex = 0;
+    let mediaRecorder; 
+    let audioChunks = []; 
+    let jobDescription = '';
+    let customInterviewQuestions = []; // CRITICAL: This will store the questions fetched from the API
+
+    // ----------------------------------------------------
+    // I. UI NAVIGATION LOGIC
+    // ----------------------------------------------------
+
+    function showScreen(id) {
+        screens.forEach(screen => {
+            screen.classList.remove('active');
+            screen.style.display = 'none';
+        });
+        document.getElementById(id).classList.add('active');
+        document.getElementById(id).style.display = 'block';
+        
+        if (id === 'main-menu') {
+            document.getElementById('btn-start-interview').disabled = false;
+            document.getElementById('jd-details').disabled = false;
+            document.getElementById('interview-area').style.display = 'none';
+        }
+    }
+
+    // ----------------------------------------------------
+    // II. ATS CHECK LOGIC (File Handling + API Call)
+    // ----------------------------------------------------
+
+    async function checkATSScore() {
+        const fileInput = document.getElementById('resume-file-upload');
+        const file = fileInput.files[0];
+        const resultBox = document.getElementById('ats-result');
+        const suggestionsList = document.getElementById('ats-suggestions');
+        
+        if (!file || file.type !== 'application/pdf') {
+            alert("Please upload a PDF file first.");
+            return;
+        }
+
+        // 1. Show Loading State
+        resultBox.style.display = 'block';
+        document.getElementById('ats-score').textContent = 'Analyzing...';
+        suggestionsList.innerHTML = '<li><i class="fas fa-spinner fa-spin mr-2"></i> Analyzing resume structure and keywords...</li>';
+
+        // 2. Prepare Data for API
+        const formData = new FormData();
+        formData.append('resume_file', file, file.name);
+
+        try {
+            // 3. Call the Flask ATS endpoint
+            const response = await fetch(`${API_BASE_URL}/api/placement/ats/score`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error);
+            }
+
+            const data = await response.json();
+            
+            // 4. Update UI with results
+            document.getElementById('ats-score').textContent = data.score;
+            suggestionsList.innerHTML = '';
+            
+            if (Array.isArray(data.suggestions)) {
+                data.suggestions.forEach(s => {
+                    const li = document.createElement('li');
+                    li.textContent = s;
+                    suggestionsList.appendChild(li);
+                });
+            } else {
+                 suggestionsList.innerHTML = '<li>Suggestions structure failed. Check network response.</li>';
+            }
+
+        } catch (error) {
+            console.error("ATS Check Failed:", error);
+            document.getElementById('ats-score').textContent = '--';
+            suggestionsList.innerHTML = `<li>Error: Analysis failed. ${error.message}</li>`;
+        }
+    }
+
+
+    // ----------------------------------------------------
+    // III. MOCK INTERVIEW LOGIC (Voice + API Orchestration)
+    // ----------------------------------------------------
+
+    /** CRITICAL: Fetches custom questions based on JD before starting the mic loop. */
+    async function startInterview() {
+        jobDescription = document.getElementById('jd-details').value;
+        if (!jobDescription || jobDescription.length < 50) {
+            alert("Please paste a comprehensive Job Description (min 50 chars) to tailor the questions.");
+            return;
+        }
+
+        document.getElementById('btn-start-interview').disabled = true;
+        document.getElementById('jd-details').disabled = true;
+        
+        // 1. Show Loading UI
+        document.getElementById('interview-area').style.display = 'block';
+        document.getElementById('current-question').textContent = "Generating custom questions based on JD...";
+
+        try {
+            // 2. Call NEW Endpoint to generate questions
+            const response = await fetch(`${API_BASE_URL}/api/placement/mock/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jd_text: jobDescription })
+            });
+
+            // CRITICAL FIX: Check for HTML response indicating session timeout/login page
+            const contentType = response.headers.get("content-type");
+            if (response.status === 200 && contentType && contentType.includes("text/html")) {
+                throw new Error("Session Expired. Please refresh and log back in to start the interview.");
+            }
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                // Attempt to parse JSON error if available, otherwise return raw text
+                try {
+                     const errorData = JSON.parse(errorText);
+                     throw new Error(errorData.error || `Server error: ${response.status}`);
+                } catch {
+                     throw new Error(`Server error: ${response.status}. Check backend logs.`);
+                }
+            }
+
+            const data = await response.json();
+            
+            // 3. Store custom questions and start the interview
+            customInterviewQuestions = data.questions;
+            
+            if (!customInterviewQuestions || customInterviewQuestions.length === 0) {
+                 throw new Error('Analysis engine returned an empty list of questions. Try a more detailed JD.');
+            }
+
+            currentQuestionIndex = 0;
+            loadQuestion(currentQuestionIndex);
+
+        } catch (error) {
+            console.error("Question Generation Failed:", error);
+            document.getElementById('current-question').textContent = `Setup Error: ${error.message}`;
+            document.getElementById('btn-start-interview').disabled = false;
+            document.getElementById('jd-details').disabled = false;
+        }
+    }
+
+    /** Loads the specified question into the UI. */
+    function loadQuestion(index) {
+        // Use the dynamically generated questions list
+        if (index >= customInterviewQuestions.length) {
+            alert("Interview complete! Thank you for participating. Returning to the main menu.");
+            showScreen('main-menu'); 
+            return;
+        }
+
+        // We combine the generated question (string) with the static criteria for the API call
+        const currentQText = customInterviewQuestions[index]; 
+        
+        document.getElementById('question-number').textContent = index + 1;
+        document.getElementById('current-question').textContent = currentQText;
+        
+        // Reset UI elements
+        document.getElementById('btn-next-question').disabled = true;
+        document.getElementById('btn-start-recording').disabled = false;
+        document.getElementById('interview-feedback').style.display = 'none';
+        document.getElementById('transcript-display').textContent = '...';
+        document.getElementById('feedback-summary').textContent = '';
+        document.getElementById('feedback-suggestion').textContent = '';
+    }
+    
+    /** Starts the browser microphone recording. (Logic remains the same) */
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                sendForAssessment(audioBlob, stream);
+            };
+
+            mediaRecorder.start();
+            document.getElementById('mic-status').textContent = 'Recording... Speak now.';
+            document.getElementById('mic-status').classList.add('recording');
+            document.getElementById('btn-start-recording').disabled = true;
+            document.getElementById('btn-stop-recording').disabled = false;
+
+        } catch (err) {
+            document.getElementById('mic-status').textContent = 'Error: Microphone access failed.';
+            alert("Microphone access is required for the mock interview.");
+        }
+    }
+
+    /** Stops recording and triggers the assessment API call. (Logic remains the same) */
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            document.getElementById('mic-status').textContent = 'Processing...';
+            document.getElementById('mic-status').classList.remove('recording');
+            document.getElementById('btn-stop-recording').disabled = true;
+        }
+    }
+
+    /** Sends the recorded audio to the Flask API for transcription & Gemini assessment. */
+    async function sendForAssessment(audioBlob, stream) {
+        stream.getTracks().forEach(track => track.stop());
+
+        const currentQText = document.getElementById('current-question').textContent;
+        const genericCriteria = "Assess clarity, technical relevance to the JD, and use of the STAR method (Situation, Task, Action, Result) in the response."; 
+        
+        const formData = new FormData();
+        
+        formData.append('audio_file', audioBlob, 'answer.webm');
+        formData.append('question_text', currentQText);
+        formData.append('criteria', genericCriteria); 
+
+        document.getElementById('interview-feedback').style.display = 'block';
+        document.getElementById('feedback-summary').textContent = 'Waiting for AI transcription...';
+        document.getElementById('feedback-suggestion').textContent = '...';
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/placement/mock/assess`, {
+                method: 'POST',
+                body: formData
+            });
+
+            // CRITICAL FIX: Check for HTML response indicating session timeout/login page
+            const contentType = response.headers.get("content-type");
+            if (response.status === 200 && contentType && contentType.includes("text/html")) {
+                throw new Error("Session Expired. Please refresh and log back in to resume the interview.");
+            }
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                // Try to parse JSON error response from server
+                try {
+                    const errorData = JSON.parse(errorText);
+                    document.getElementById('transcript-display').textContent = errorData.transcript || 'N/A';
+                    throw new Error(errorData.error || `Server responded with status ${response.status}`);
+                } catch {
+                     throw new Error(`Server error: ${response.status}. Check backend logs.`);
+                }
+            }
+
+            const data = await response.json(); 
+            
+            // 2. Update UI with Assessment Results
+            document.getElementById('transcript-display').textContent = data.transcript || "Transcription failed.";
+            document.getElementById('feedback-summary').textContent = data.feedback.ScoreSummary;
+            document.getElementById('feedback-suggestion').textContent = data.feedback.ActionableSuggestion;
+            document.getElementById('mic-status').textContent = 'Assessment complete.';
+            document.getElementById('btn-next-question').disabled = false;
+
+        } catch (error) {
+            console.error("Interview Assessment Failed:", error);
+            document.getElementById('mic-status').textContent = `Assessment Error: ${error.message}`;
+            document.getElementById('feedback-summary').textContent = `Failure: ${error.message}`;
+        }
+    }
+    
+    /** Moves to the next question in the sequence. */
+    function nextQuestion() {
+        currentQuestionIndex++;
+        loadQuestion(currentQuestionIndex);
+    }
+    
+    // Initial load: Ensure the main-menu is shown when the page loads
+    window.addEventListener('load', () => {
+        showScreen('main-menu'); 
+    });
+</script>
+{% endblock %}

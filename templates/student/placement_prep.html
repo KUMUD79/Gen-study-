@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Placement Prep Module</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        // NOTE: You must set the worker source for PDF.js to function
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+
+    <style>
+        .prep-container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f7f7f7;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .screen { display: none; padding: 20px; border: 1px solid #ddd; border-radius: 6px; background: white; margin-top: 20px; }
+        .screen.active { display: block; }
+        .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+        .option-card { padding: 30px; border: 2px solid #007bff; border-radius: 8px; text-align: center; cursor: pointer; transition: background 0.2s; }
+        .option-card:hover { background-color: #e9f5ff; }
+        .result-box { margin-top: 20px; padding: 15px; border: 1px dashed #28a745; background-color: #e9ffed; border-radius: 4px; }
+        .status-indicator { font-weight: bold; color: #6c757d; margin-top: 10px; }
+        .recording { color: #dc3545; }
+        .mic-controls button { margin: 5px; padding: 10px 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<main class="prep-container">
+    <header>
+        <h1>🚀 Placement Prep Hub</h1>
+    </header>
+
+    <section id="main-menu" class="screen active">
+        <h2>Select Your Preparation Path</h2>
+        <div class="option-grid">
+            
+            <div class="option-card" onclick="showScreen('ats-check-screen')">
+                <h3>📄 ATS Score Check of Resume</h3>
+                <p>Analyze and score your PDF resume against key ATS criteria. (Uses internal server logic)</p>
+            </div>
+
+            <div class="option-card" onclick="showScreen('mock-interview-screen')">
+                <h3>🎙️ Mock Interview</h3>
+                <p>Practice speaking your answers based on a JD and get AI-powered feedback. (Uses STT + Gemini API)</p>
+            </div>
+        </div>
+    </section>
+
+
+    <section id="ats-check-screen" class="screen">
+        <h2>📄 ATS Score Check </h2>
+        <p class="instruction">Upload your PDF resume below. The system will analyze its content, keywords, and structure.</p>
+        
+        <div class="ats-upload-area">
+            <input type="file" id="resume-file-upload" accept=".pdf" required>
+            <button onclick="checkATSScore()">Check Score</button>
+        </div>
+
+        <div id="ats-result" class="result-box" style="display: none;">
+            <h4>Analysis Result:</h4>
+            <p>Your ATS Score: <span id="ats-score">--</span>/100</p>
+            <h5>Suggested Changes:</h5>
+            <ul id="ats-suggestions"></ul>
+        </div>
+
+        <button class="back-button" onclick="showScreen('main-menu')">← Back to Main Menu</button>
+    </section>
+
+
+    <section id="mock-interview-screen" class="screen">
+        <h2>🎙️ Mock Interview Setup</h2>
+        <p class="instruction">Paste the Job Description (JD) and click start. We will ask 5 tailored questions.</p>
+
+        <div class="jd-input-area">
+            <textarea id="jd-details" placeholder="Paste Full Job Description Here..." rows="6"></textarea>
+            <button id="btn-start-interview" onclick="startInterview()">Start 5-Question Interview</button>
+        </div>
+
+        <div id="interview-area" style="display: none;">
+            <hr>
+            <h3>Question <span id="question-number">1</span> of 5</h3>
+            <p id="current-question" class="question-text">Loading...</p>
+            
+            <div class="mic-controls">
+                <button id="btn-start-recording" onclick="startRecording()">🎙️ Start Speaking</button>
+                <button id="btn-stop-recording" onclick="stopRecording()" disabled>🛑 Stop & Assess</button>
+                <p id="mic-status" class="status-indicator">Ready to record.</p>
+            </div>
+
+            <div id="interview-feedback" class="result-box" style="display: none;">
+                <h4>AI Feedback:</h4>
+                <p>Transcript: <span id="transcript-display">...</span></p>
+                <p id="feedback-summary" style="font-style: italic;"></p>
+                <p id="feedback-suggestion" style="font-weight: 600;"></p>
+                <button id="btn-next-question" onclick="nextQuestion()" disabled>Next Question →</button>
+            </div>
+        </div>
+
+        <button class="back-button" onclick="showScreen('main-menu')">← Back to Main Menu</button>
+    </section>
+
+</main>
+
+<script>
+    // --- CORE JAVASCRIPT LOGIC ---
+
+    // NOTE: Flask runs on port 5000 by default. Adjust if your deployment differs.
+    const API_BASE_URL = window.location.origin; // Should resolve to http://127.0.0.1:5000
+
+    const screens = document.querySelectorAll('.screen');
+    let currentQuestionIndex = 0;
+    let mediaRecorder; 
+    let audioChunks = []; 
+    let jobDescription = '';
+
+    // Static Interview Data (Questions and internal criteria sent to the API)
+    const interviewQuestions = [
+        { q: "How do you approach cleaning and preparing data for analysis, and what tools do you typically use?", criteria: "Must mention 3+ technical keywords: SQL, Python/R, Pandas/NumPy, Imputation/Handling Missing Values. Look for a clear process flow." },
+        { q: "Describe a time you had to communicate complex data findings to a non-technical audience. Use the STAR method.", criteria: "Mandatory STAR structure (Situation, Task, Action, Result) and soft skills: Visualization, Storytelling. Quantify the result." },
+        { q: "Explain the difference between Descriptive and Inferential Statistics, and give a real-world example of each.", criteria: "Must clearly define both. Must use terms: Mean/Median/Mode (Descriptive) and Prediction/Hypothesis Testing/Sampling (Inferential)." },
+        { q: "You find significant outliers in a sales dataset that contradicts a key business assumption. What is your process for handling this situation?", criteria: "Must mention 3 steps: Verify Source/Check for Error, Assess Business Impact, Methodical treatment (Imputation/Removal/Flagging). Assess Critical Thinking." },
+        { q: "Tell me about a data analysis project you are most proud of. What was your role and the final impact?", criteria: "Mandatory STAR structure. Must quantify the Result (e.g., increased/reduced X by Y%). Must mention a challenge and how it was overcome." }
+    ];
+
+    // ----------------------------------------------------
+    // I. UI NAVIGATION LOGIC
+    // ----------------------------------------------------
+
+    /** Hides all screens and shows the one with the given ID. */
+    function showScreen(id) {
+        screens.forEach(screen => {
+            screen.classList.remove('active');
+        });
+        document.getElementById(id).classList.add('active');
+    }
+
+    // ----------------------------------------------------
+    // II. ATS CHECK LOGIC (File Handling + API Call)
+    // ----------------------------------------------------
+
+    /** Converts PDF file to text using PDF.js before sending to the Flask API. */
+    function pdfToText(file) {
+        return new Promise((resolve, reject) => {
+            const fileReader = new FileReader();
+            fileReader.onload = function() {
+                const typedarray = new Uint8Array(this.result);
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    const maxPages = pdf.numPages;
+                    let textPromises = [];
+                    for (let i = 1; i <= maxPages; i++) {
+                        textPromises.push(pdf.getPage(i).then(function(page) {
+                            return page.getTextContent().then(function(textContent) {
+                                return textContent.items.map(function(s) { return s.str; }).join(' ');
+                            });
+                        }));
+                    }
+                    Promise.all(textPromises).then(function(texts) {
+                        resolve(texts.join('\n'));
+                    }).catch(reject);
+                }).catch(reject);
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
+    }
+
+    /** Handles file upload and calls the Flask ATS endpoint. */
+    async function checkATSScore() {
+        const fileInput = document.getElementById('resume-file-upload');
+        const file = fileInput.files[0];
+        const resultBox = document.getElementById('ats-result');
+        const suggestionsList = document.getElementById('ats-suggestions');
+        
+        if (!file || file.type !== 'application/pdf') {
+            alert("Please upload a PDF file first.");
+            return;
+        }
+
+        // 1. Show Loading State
+        resultBox.style.display = 'block';
+        document.getElementById('ats-score').textContent = 'Analyzing...';
+        suggestionsList.innerHTML = '<li>Analyzing resume structure and keywords...</li>';
+
+        // 2. Prepare Data for API (Send the file directly)
+        const formData = new FormData();
+        formData.append('resume_file', file, file.name);
+
+        try {
+            // 3. Call the Flask ATS endpoint
+            const response = await fetch(`${API_BASE_URL}/api/placement/ats/score`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                // If Flask server returns an error (e.g., 400 or 500)
+                const errorData = await response.json();
+                throw new Error(`API Error: ${response.status} - ${errorData.error}`);
+            }
+
+            const data = await response.json();
+            
+            // 4. Update UI with results
+            document.getElementById('ats-score').textContent = data.score;
+            suggestionsList.innerHTML = '';
+            data.suggestions.forEach(s => {
+                const li = document.createElement('li');
+                li.textContent = s;
+                suggestionsList.appendChild(li);
+            });
+
+        } catch (error) {
+            console.error("ATS Check Failed:", error);
+            document.getElementById('ats-score').textContent = '--';
+            suggestionsList.innerHTML = `<li>Error: Analysis failed. ${error.message}</li>`;
+        }
+    }
+
+
+    // ----------------------------------------------------
+    // III. MOCK INTERVIEW LOGIC (Voice + API Orchestration)
+    // ----------------------------------------------------
+
+    /** Initializes the interview and loads the first question. */
+    function startInterview() {
+        jobDescription = document.getElementById('jd-details').value;
+        if (!jobDescription || jobDescription.length < 50) {
+            alert("Please paste a comprehensive Job Description (min 50 chars) to tailor the questions.");
+            return;
+        }
+
+        currentQuestionIndex = 0;
+        document.getElementById('interview-area').style.display = 'block';
+        document.getElementById('btn-start-interview').disabled = true;
+        document.getElementById('jd-details').disabled = true;
+        
+        loadQuestion(currentQuestionIndex);
+        document.getElementById('interview-feedback').style.display = 'none';
+    }
+
+    /** Loads the specified question into the UI. */
+    function loadQuestion(index) {
+        if (index >= interviewQuestions.length) {
+            alert("Interview complete! Thank you for participating. Returning to the main menu.");
+            document.getElementById('btn-start-interview').disabled = false;
+            document.getElementById('jd-details').disabled = false;
+            showScreen('main-menu'); 
+            return;
+        }
+
+        document.getElementById('question-number').textContent = index + 1;
+        document.getElementById('current-question').textContent = interviewQuestions[index].q;
+        
+        // Reset UI elements
+        document.getElementById('btn-next-question').disabled = true;
+        document.getElementById('btn-start-recording').disabled = false;
+        document.getElementById('interview-feedback').style.display = 'none';
+        document.getElementById('transcript-display').textContent = '...';
+        document.getElementById('feedback-summary').textContent = '';
+        document.getElementById('feedback-suggestion').textContent = '';
+    }
+
+    /** Starts the browser microphone recording. */
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                sendForAssessment(audioBlob, stream);
+                // Mic stream is stopped in sendForAssessment
+            };
+
+            mediaRecorder.start();
+            document.getElementById('mic-status').textContent = 'Recording... Speak now.';
+            document.getElementById('mic-status').classList.add('recording');
+            document.getElementById('btn-start-recording').disabled = true;
+            document.getElementById('btn-stop-recording').disabled = false;
+
+        } catch (err) {
+            console.error('Microphone access denied or failed:', err);
+            document.getElementById('mic-status').textContent = 'Error: Microphone access failed.';
+            alert("Microphone access is required for the mock interview.");
+        }
+    }
+
+    /** Stops recording and triggers the assessment API call. */
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            document.getElementById('mic-status').textContent = 'Processing...';
+            document.getElementById('mic-status').classList.remove('recording');
+            document.getElementById('btn-stop-recording').disabled = true;
+        }
+    }
+
+    /** Sends the recorded audio to the Flask API for transcription & Gemini assessment. */
+    async function sendForAssessment(audioBlob, stream) {
+        // Stop all media tracks to release the microphone immediately
+        stream.getTracks().forEach(track => track.stop());
+
+        const currentQ = interviewQuestions[currentQuestionIndex];
+        const formData = new FormData();
+        
+        // Append all data needed by the /mock/assess endpoint
+        formData.append('audio_file', audioBlob, 'answer.webm');
+        formData.append('question_text', currentQ.q);
+        formData.append('criteria', currentQ.criteria);
+        
+        document.getElementById('interview-feedback').style.display = 'block';
+        document.getElementById('feedback-summary').textContent = 'Waiting for AI transcription...';
+        document.getElementById('feedback-suggestion').textContent = '...';
+
+        try {
+            // 1. Call the dedicated Placement Prep API endpoint
+            const response = await fetch(`${API_BASE_URL}/api/placement/mock/assess`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`API Error: ${response.status} - ${errorData.error}`);
+            }
+
+            const data = await response.json(); 
+            
+            // 2. Update UI with Assessment Results
+            document.getElementById('transcript-display').textContent = data.transcript || "Transcription failed or returned no speech.";
+            document.getElementById('feedback-summary').textContent = data.feedback.ScoreSummary;
+            document.getElementById('feedback-suggestion').textContent = data.feedback.ActionableSuggestion;
+            document.getElementById('mic-status').textContent = 'Assessment complete.';
+            document.getElementById('btn-next-question').disabled = false;
+
+        } catch (error) {
+            console.error("Interview Assessment Failed:", error);
+            document.getElementById('mic-status').textContent = `Assessment Error: ${error.message}`;
+            document.getElementById('feedback-summary').textContent = `Failure: ${error.message}`;
+        }
+    }
+    
+    /** Moves to the next question in the sequence. */
+    function nextQuestion() {
+        currentQuestionIndex++;
+        loadQuestion(currentQuestionIndex);
+    }
+    
+    // Initial load: Ensure the main-menu is shown when the module loads
+    window.addEventListener('load', () => {
+        showScreen('main-menu'); 
+    });
+</script>
+</body>
+</html>

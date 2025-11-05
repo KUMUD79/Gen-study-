@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GenStudy AI | High-Efficiency Learning{% endblock %}</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-dark': '#152458', // Deep Navy Blue
+                        'primary-light': '#3b82f6', // Brighter Blue
+                        'accent-green': '#10b981', // Emerald Green
+                        'bg-light': '#f9fafb',
+                    },
+                    backgroundImage: {
+                        'nav-gradient': 'linear-gradient(to right, #1e3a8a, #152458)', 
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="bg-bg-light min-h-screen flex flex-col font-sans">
+
+    <nav class="bg-nav-gradient shadow-xl sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <a class="flex-shrink-0 text-white text-2xl font-extrabold tracking-wider hover:text-gray-200 transition duration-150" href="{{ url_for('routes.home') }}">
+                    <i class="fas fa-brain mr-2"></i> GenStudy AI
+                </a>
+                <div class="flex items-center">
+                    <div class="hidden md:block">
+                        <div class="ml-10 flex items-baseline space-x-4">
+                            {% if current_user.is_authenticated %}
+                                {% if current_user.role == 'student' %}
+                                    <a href="{{ url_for('routes.student_dashboard') }}" class="text-gray-200 hover:bg-primary-light/50 px-3 py-2 rounded-md text-sm font-medium transition duration-150">Dashboard</a>
+                                    <a href="#" class="text-gray-200 hover:bg-primary-light/50 px-3 py-2 rounded-md text-sm font-medium transition duration-150">Leaderboard</a>
+                                {% elif current_user.role == 'teacher' %}
+                                    <a href="{{ url_for('routes.teacher_dashboard') }}" class="text-gray-200 hover:bg-primary-light/50 px-3 py-2 rounded-md text-sm font-medium transition duration-150">Teacher Panel</a>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="ml-4 flex items-center md:ml-6 space-x-3">
+                        {% if current_user.is_authenticated %}
+                            <span class="text-gray-300 text-sm hidden sm:inline font-semibold">
+                                {{ current_user.username }} ({{ current_user.role | capitalize }})
+                            </span>
+                            <a href="{{ url_for('routes.logout') }}" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition duration-150 shadow-md">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('routes.login') }}" class="bg-accent-green hover:bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition duration-150 shadow-md">Login</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <main class="flex-grow max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="fixed top-16 left-1/2 transform -translate-x-1/2 w-full max-w-xl z-50 space-y-2 px-4 sm:px-0">
+                    {% for category, message in messages %}
+                        <div class="flex items-center justify-between p-4 rounded-lg shadow-xl text-sm 
+                            {% if category == 'success' %} bg-accent-green/90 text-white border border-accent-green 
+                            {% elif category == 'danger' %} bg-red-600/90 text-white border border-red-700 
+                            {% elif category == 'warning' %} bg-yellow-500/90 text-white border border-yellow-600 
+                            {% else %} bg-blue-600/90 text-white border border-blue-700 
+                            {% endif %}" role="alert">
+                            <span class="font-medium">{{ message }}</span>
+                            <button type="button" class="ml-auto -mx-1.5 -my-1.5 p-1.5 inline-flex items-center justify-center h-8 w-8 rounded-lg focus:ring-2" 
+                                data-dismiss="alert" aria-label="Close" onclick="this.parentElement.style.display='none'">
+                                <span class="sr-only">Close</span>
+                                <i class="fas fa-times text-white"></i>
+                            </button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-white border-t border-gray-200 mt-auto">
+        <div class="max-w-7xl mx-auto py-4 px-4 text-center text-xs text-gray-500">
+            High-Efficiency Learning Powered by AI | <i class="fas fa-flask"></i> GenStudy
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
